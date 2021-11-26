@@ -1,4 +1,5 @@
-// Рисует зелёный треугольник
+
+// Градиентнйы треугольник
 
 #include <gl/glew.h>
 #include <SFML/OpenGL.hpp>
@@ -9,16 +10,25 @@
 #include "math.h"
 
 #include <iostream>
+#include <array>
+#include <initializer_list>
 
 #define deg2rad M_PI /180.0
+
 
 // Переменные с индентификаторами ID
 // ID шейдерной программы
 GLuint Program;
-// ID атрибута
+// ID атрибута вершин
 GLint Attrib_vertex;
-// ID Vertex Buffer Object
-GLuint VBO;
+// ID атрибута цвета
+GLint Attrib_color;
+// ID юниформ переменной цвета
+GLint Unif_color;
+// ID VBO вершин
+GLuint VBO_position;
+// ID VBO цвета
+GLuint VBO_color;
 // Вершина
 struct Vertex
 {
@@ -26,21 +36,29 @@ struct Vertex
     GLfloat y;
 };
 
+
 // Исходный код вершинного шейдера
 const char* VertexShaderSource = R"(
     #version 330 core
     in vec2 coord;
+    in vec4 color;
+
+    out vec4 vert_color;
+
     void main() {
         gl_Position = vec4(coord, 0.0, 1.0);
+        vert_color = color;
     }
 )";
 
 // Исходный код фрагментного шейдера
 const char* FragShaderSource = R"(
     #version 330 core
+    in vec4 vert_color;
+
     out vec4 color;
     void main() {
-        color = vec4(1, 0, 0, 1);
+        color = vert_color;
     }
 )";
 
@@ -51,7 +69,7 @@ void Release();
 
 
 int main() {
-    sf::Window window(sf::VideoMode(700, 700), "My OpenGL window", sf::Style::Default, sf::ContextSettings(24));
+    sf::Window window(sf::VideoMode(600, 600), "My OpenGL window", sf::Style::Default, sf::ContextSettings(24));
     window.setVerticalSyncEnabled(true);
 
     window.setActive(true);
@@ -68,7 +86,7 @@ int main() {
                 window.close();
             }
             else if (event.type == sf::Event::Resized) {
-                //glViewport(0, 0, event.size.width, event.size.height);
+                glViewport(0, 0, event.size.width, event.size.height);
             }
         }
 
@@ -114,17 +132,54 @@ void ShaderLog(unsigned int shader)
     }
 }
 
+const int circleVertexCount = 360;
+
+float bytify(float color)
+{
+    return (1 / 100.0) * color;
+}
+
+std::array<float, 4> HSVtoRGB(float hue, float saturation = 100.0, float value = 100.0)
+{
+    int sw = (int)floor(hue / 60) % 6;
+    float vmin = ((100.0f - saturation) * value) / 100.0;
+    float a = (value - vmin) * (((int)hue % 60) / 60.0);
+    float vinc = vmin + a;
+    float vdec = value - a;
+    switch (sw)
+    {
+    case 0: return { bytify(value), bytify(vinc), bytify(vmin), 1.0 };
+    case 1: return { bytify(vdec), bytify(value), bytify(vmin), 1.0 };
+    case 2: return { bytify(vmin), bytify(value), bytify(vinc), 1.0 };
+    case 3: return { bytify(vmin), bytify(vdec), bytify(value), 1.0 };
+    case 4: return { bytify(vinc), bytify(vmin), bytify(value), 1.0 };
+    case 5: return { bytify(value), bytify(vmin), bytify(vdec), 1.0 };
+    }
+    return { 0, 0, 0 , 0};
+}
+
 void InitVBO()
 {
-    glGenBuffers(1, &VBO);
-    // Вершины нашего треугольника
-    Vertex petingle[5] = {};
-    for (int i = 0; i < 5; i++) {
-        petingle[i] = { 0.5f * (float)cos(i * 72 * deg2rad), 0.5f * (float)sin(i * 72 * deg2rad) };
+    glGenBuffers(1, &VBO_position);
+    glGenBuffers(1, &VBO_color);
+    // Цвет треугольника
+    std::array<std::array<float, 4>, circleVertexCount> colors = {};
+
+    Vertex circle[circleVertexCount] = {};
+    for (int i = 0; i < circleVertexCount; i++) {
+        circle[i] = { 0.5f * (float)cos(i * (360.0 / circleVertexCount) * deg2rad), 0.5f * (float)sin(i * (360.0 / circleVertexCount) * deg2rad) };
+        //circle[i + 1] = { 0.5f * (float)cos((i+1) * (360.0 / circleVertexCount) * deg2rad), 0.5f * (float)sin((i + 1) * (360.0 / circleVertexCount) * deg2rad) };
+        //circle[i + 2] = { 0.0f, 0.0f };
+        colors[i] = HSVtoRGB(i % 360);
+        //colors[i + 1] = HSVtoRGB((i + 1) % 360);
+        //colors[i + 2] = { 1.0, 1.0, 1.0, 1.0 };
     }
+
     // Передаем вершины в буфер
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(petingle), petingle, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_position);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(circle), circle, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_color);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors.data(), GL_STATIC_DRAW);
     checkOpenGLerror();
 }
 
@@ -164,12 +219,19 @@ void InitShader() {
         return;
     }
 
-    // Вытягиваем ID атрибута из собранной программы
-    const char* attr_name = "coord";
-    Attrib_vertex = glGetAttribLocation(Program, attr_name);
+    // Вытягиваем ID атрибута вершин из собранной программы
+    Attrib_vertex = glGetAttribLocation(Program, "coord");
     if (Attrib_vertex == -1)
     {
-        std::cout << "could not bind attrib " << attr_name << std::endl;
+        std::cout << "could not bind attrib coord" << std::endl;
+        return;
+    }
+
+    // Вытягиваем ID атрибута цвета
+    Attrib_color = glGetAttribLocation(Program, "color");
+    if (Attrib_color == -1)
+    {
+        std::cout << "could not bind attrib color" << std::endl;
         return;
     }
 
@@ -185,19 +247,28 @@ void Init() {
 void Draw() {
     // Устанавливаем шейдерную программу текущей
     glUseProgram(Program);
-    // Включаем массив атрибутов
+    // Включаем массивы атрибутов
     glEnableVertexAttribArray(Attrib_vertex);
-    // Подключаем VBO
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    // Указывая pointer 0 при подключенном буфере, мы указываем что данные в VBO
+    glEnableVertexAttribArray(Attrib_color);
+
+    // Подключаем VBO_position
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_position);
     glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // Подключаем VBO_color
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_color);
+    glVertexAttribPointer(Attrib_color, 4, GL_FLOAT, GL_FALSE, 0, 0);
+
     // Отключаем VBO
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
     // Передаем данные на видеокарту(рисуем)
-    glDrawArrays(GL_POLYGON, 0, 5);
-    // Отключаем массив атрибутов
+    glDrawArrays(GL_POLYGON, 0, circleVertexCount);
+
+    // Отключаем массивы атрибутов
     glDisableVertexAttribArray(Attrib_vertex);
-    // Отключаем шейдерную программу
+    glDisableVertexAttribArray(Attrib_color);
+
     glUseProgram(0);
     checkOpenGLerror();
 }
@@ -215,7 +286,8 @@ void ReleaseShader() {
 void ReleaseVBO()
 {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glDeleteBuffers(1, &VBO);
+    glDeleteBuffers(1, &VBO_position);
+    glDeleteBuffers(1, &VBO_color);
 }
 
 void Release() {
