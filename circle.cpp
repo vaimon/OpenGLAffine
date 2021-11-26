@@ -24,7 +24,9 @@ GLint Attrib_vertex;
 // ID атрибута цвета
 GLint Attrib_color;
 // ID юниформ переменной цвета
-GLint Unif_color;
+GLint Unif_xscale;
+
+GLint Unif_yscale;
 // ID VBO вершин
 GLuint VBO_position;
 // ID VBO цвета
@@ -43,10 +45,16 @@ const char* VertexShaderSource = R"(
     in vec2 coord;
     in vec4 color;
 
+    uniform float x_scale;
+    uniform float y_scale;
+    
     out vec4 vert_color;
 
     void main() {
-        gl_Position = vec4(coord, 0.0, 1.0);
+        vec3 position = vec3(coord, 1.0) * mat3(x_scale,0,0,
+                                                0,y_scale,0,
+                                                0,0,1);
+        gl_Position = vec4(position[0],position[1], 0.0, 1.0);
         vert_color = color;
     }
 )";
@@ -67,6 +75,13 @@ void Init();
 void Draw();
 void Release();
 
+float scaleX = 1.0;
+float scaleY = 1.0;
+
+void changeScale(float scaleXinc, float scaleYinc) {
+    scaleX += scaleXinc;
+    scaleY += scaleYinc;
+}
 
 int main() {
     sf::Window window(sf::VideoMode(600, 600), "My OpenGL window", sf::Style::Default, sf::ContextSettings(24));
@@ -87,6 +102,15 @@ int main() {
             }
             else if (event.type == sf::Event::Resized) {
                 glViewport(0, 0, event.size.width, event.size.height);
+            }
+            else if (event.type == sf::Event::KeyPressed) {
+                switch (event.key.code) {
+                case (sf::Keyboard::W): changeScale(0, 0.1); break;
+                case (sf::Keyboard::S): changeScale(0, -0.1); break;
+                case (sf::Keyboard::A): changeScale(-0.1, 0); break;
+                case (sf::Keyboard::D): changeScale(0.1, 0); break;
+                default: break;
+                }
             }
         }
 
@@ -235,6 +259,23 @@ void InitShader() {
         return;
     }
 
+    // Вытягиваем ID юниформ
+    const char* unif_name = "x_scale";
+    Unif_xscale = glGetUniformLocation(Program, unif_name);
+    if (Unif_xscale == -1)
+    {
+        std::cout << "could not bind uniform " << unif_name << std::endl;
+        return;
+    }
+
+    unif_name = "y_scale";
+    Unif_yscale = glGetUniformLocation(Program, unif_name);
+    if (Unif_yscale == -1)
+    {
+        std::cout << "could not bind uniform " << unif_name << std::endl;
+        return;
+    }
+
     checkOpenGLerror();
 }
 
@@ -247,6 +288,11 @@ void Init() {
 void Draw() {
     // Устанавливаем шейдерную программу текущей
     glUseProgram(Program);
+
+    glUniform1f(Unif_xscale, scaleX);
+    glUniform1f(Unif_yscale, scaleY);
+
+
     // Включаем массивы атрибутов
     glEnableVertexAttribArray(Attrib_vertex);
     glEnableVertexAttribArray(Attrib_color);
