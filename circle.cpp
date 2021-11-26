@@ -163,16 +163,16 @@ void InitVBO()
     glGenBuffers(1, &VBO_position);
     glGenBuffers(1, &VBO_color);
     // Цвет треугольника
-    std::array<std::array<float, 4>, circleVertexCount> colors = {};
+    std::array<std::array<float, 4>, circleVertexCount * 3> colors = {};
 
-    Vertex circle[circleVertexCount] = {};
+    Vertex circle[circleVertexCount * 3] = {};
     for (int i = 0; i < circleVertexCount; i++) {
-        circle[i] = { 0.5f * (float)cos(i * (360.0 / circleVertexCount) * deg2rad), 0.5f * (float)sin(i * (360.0 / circleVertexCount) * deg2rad) };
-        //circle[i + 1] = { 0.5f * (float)cos((i+1) * (360.0 / circleVertexCount) * deg2rad), 0.5f * (float)sin((i + 1) * (360.0 / circleVertexCount) * deg2rad) };
-        //circle[i + 2] = { 0.0f, 0.0f };
-        colors[i] = HSVtoRGB(i % 360);
-        //colors[i + 1] = HSVtoRGB((i + 1) % 360);
-        //colors[i + 2] = { 1.0, 1.0, 1.0, 1.0 };
+        circle[i * 3] = { 0.5f * (float)cos(i * (360.0 / circleVertexCount) * deg2rad), 0.5f * (float)sin(i * (360.0 / circleVertexCount) * deg2rad) };
+        circle[i * 3 + 1] = { 0.5f * (float)cos((i+1) * (360.0 / circleVertexCount) * deg2rad), 0.5f * (float)sin((i + 1) * (360.0 / circleVertexCount) * deg2rad) };
+        circle[i * 3 + 2] = { 0.0f, 0.0f };
+        colors[i * 3] = HSVtoRGB(i % 360);
+        colors[i * 3 + 1] = HSVtoRGB((i + 1) % 360);
+        colors[i * 3 + 2] = { 1.0, 1.0, 1.0, 1.0 };
     }
 
     // Передаем вершины в буфер
@@ -263,7 +263,7 @@ void Draw() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     // Передаем данные на видеокарту(рисуем)
-    glDrawArrays(GL_POLYGON, 0, circleVertexCount);
+    glDrawArrays(GL_TRIANGLES, 0, circleVertexCount * 3);
 
     // Отключаем массивы атрибутов
     glDisableVertexAttribArray(Attrib_vertex);
