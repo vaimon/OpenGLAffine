@@ -5,7 +5,14 @@
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
 
+#define _USE_MATH_DEFINES
+#include "math.h"
+
 #include <iostream>
+#include <array>
+#include <initializer_list>
+
+
 
 
 // Переменные с индентификаторами ID
@@ -13,8 +20,12 @@
 GLuint Program;
 // ID атрибута
 GLint Attrib_vertex;
+GLint Attrib_color;
 // ID Vertex Buffer Object
-GLuint VBO;
+// ID VBO вершин
+GLuint VBO_position;
+// ID VBO цвета
+GLuint VBO_color;
 // Вершина
 struct Vertex
 {
@@ -29,21 +40,23 @@ const char* VertexShaderSource = R"(
 
     // Координаты вершины. Атрибут, инициализируется через буфер.
     in vec3 vertexPosition;
-    
+
+    in vec4 color;
     // Выходной параметр с координатами вершины, интерполируется и передётся во фрагментный шейдер 
     out vec3 vPosition;
+    out vec4 vert_color;
 
     void main() {
         // Передаём непреобразованную координату во фрагментный шейдер
         vPosition = vertexPosition;
 
         // Захардкодим углы поворота
-        float x_angle = -1;
-        float y_angle = 1;
+        float x_angle = 1;
+        float y_angle = -1;
         
         // Поворачиваем вершину
         vec3 position = vertexPosition * mat3(
-            1, 0, 0,
+           1, 0, 0,
             0, cos(x_angle), -sin(x_angle),
             0, sin(x_angle), cos(x_angle)
         ) * mat3(
@@ -54,6 +67,7 @@ const char* VertexShaderSource = R"(
 
         // Присваиваем вершину волшебной переменной gl_Position
         gl_Position = vec4(position, 1.0);
+        vert_color=color;
     }
 )";
 
@@ -63,12 +77,14 @@ const char* FragShaderSource = R"(
 
     // Интерполированные координаты вершины, передаются из вершинного шейдера
     in vec3 vPosition;
+    in vec4 vert_color;
 
     // Цвет, который будем отрисовывать
     out vec4 color;
 
     void main() {
-       color = vec4(1, 0.8, 0, 1);
+       //color = vec4(1, 0.8, 0, 1);
+         color=vert_color;
     }
 )";
 
@@ -142,10 +158,35 @@ void ShaderLog(unsigned int shader)
     }
 }
 
+float bytify(float color)
+{
+    return (1 / 100.0) * color;
+}
+
+std::array<float, 4> HSVtoRGB(float hue, float saturation = 100.0, float value = 100.0)
+{
+    int sw = (int)floor(hue / 60) % 6;
+    float vmin = ((100.0f - saturation) * value) / 100.0;
+    float a = (value - vmin) * (((int)hue % 60) / 60.0);
+    float vinc = vmin + a;
+    float vdec = value - a;
+    switch (sw)
+    {
+    case 0: return { bytify(value), bytify(vinc), bytify(vmin), 1.0 };
+    case 1: return { bytify(vdec), bytify(value), bytify(vmin), 1.0 };
+    case 2: return { bytify(vmin), bytify(value), bytify(vinc), 1.0 };
+    case 3: return { bytify(vmin), bytify(vdec), bytify(value), 1.0 };
+    case 4: return { bytify(vinc), bytify(vmin), bytify(value), 1.0 };
+    case 5: return { bytify(value), bytify(vmin), bytify(vdec), 1.0 };
+    }
+    return { 0, 0, 0 , 0 };
+}
+
 
 void InitVBO()
 {
-    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &VBO_position);
+    glGenBuffers(1, &VBO_color);
     // Вершины кубика
     Vertex triangle[] = {
         { -0.5, -0.5, +0.5 }, { -0.5, +0.5, +0.5 }, { +0.5, +0.5, +0.5 },
@@ -163,9 +204,34 @@ void InitVBO()
         { -0.5, -0.5, -0.5 }, { -0.5, +0.5, +0.5 }, { -0.5, -0.5, +0.5 },
         { -0.5, +0.5, +0.5 }, { -0.5, -0.5, -0.5 }, { -0.5, +0.5, -0.5 },
     };
+    float colors[36][4] = {
+        { 1.0, 0.0, 1.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
+        { 1.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 1.0, 0.0, 1.0, 1.0 },//невидимый
+
+        { 1.0, 1.0, 1.0, 1.0 },{ 0.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
+        { 0.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 0.0, 1.0, 1.0, 1.0 },
+
+        { 1.0, 1.0, 0.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 0.0, 0.0, 0.0, 1.0 },//невидимый одна непонятная цвет
+        { 0.0, 0.0, 0.0, 1.0 },{ 0.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
+
+        { 1.0, 1.0, 1.0, 1.0 },{ 0.0, 0.0, 1.0, 1.0 },{ 1.0, 0.0, 1.0, 1.0 },
+        { 0.0, 0.0, 1.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 0.0, 1.0, 1.0, 1.0 },
+
+        { 0.0, 1.0, 1.0, 1.0 },{ 0.0, 0.0, 1.0, 1.0 },{ 0.0, 0.0, 0.0, 1.0 },//невидимый одна непонятная цветовая грань
+        { 0.0, 0.0, 0.0, 1.0 },{ 0.0, 1.0, 0.0, 1.0 },{ 0.0, 1.0, 1.0, 1.0 },
+
+        { 1.0, 1.0, 1.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 1.0, 0.0, 1.0, 1.0 },
+        { 1.0, 0.0, 0.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
+
+  
+        
+
+    };
     // Передаем вершины в буфер
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_position);
     glBufferData(GL_ARRAY_BUFFER, sizeof(triangle), triangle, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_color);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
     checkOpenGLerror();
 }
 
@@ -213,6 +279,13 @@ void InitShader() {
         std::cout << "could not bind attrib " << attr_name << std::endl;
         return;
     }
+    // Вытягиваем ID атрибута цвета
+    Attrib_color = glGetAttribLocation(Program, "color");
+    if (Attrib_color == -1)
+    {
+        std::cout << "could not bind attrib color" << std::endl;
+        return;
+    }
 
     checkOpenGLerror();
 }
@@ -230,16 +303,21 @@ void Draw() {
     glUseProgram(Program);
     // Включаем массив атрибутов
     glEnableVertexAttribArray(Attrib_vertex);
-    // Подключаем VBO
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glEnableVertexAttribArray(Attrib_color);
+    // Подключаем VBO_position
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_position);
     // Указывая pointer 0 при подключенном буфере, мы указываем что данные в VBO
     glVertexAttribPointer(Attrib_vertex, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    // // Подключаем VBO_color
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_color);
+    glVertexAttribPointer(Attrib_color, 4, GL_FLOAT, GL_FALSE, 0, 0);
     // Отключаем VBO
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     // Передаем данные на видеокарту(рисуем)
     glDrawArrays(GL_TRIANGLES, 0, 36);
     // Отключаем массив атрибутов
     glDisableVertexAttribArray(Attrib_vertex);
+    glDisableVertexAttribArray(Attrib_color);
     // Отключаем шейдерную программу
     glUseProgram(0);
     checkOpenGLerror();
@@ -258,7 +336,8 @@ void ReleaseShader() {
 void ReleaseVBO()
 {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glDeleteBuffers(1, &VBO);
+    glDeleteBuffers(1, &VBO_position);
+    glDeleteBuffers(1, &VBO_color);
 }
 
 void Release() {
