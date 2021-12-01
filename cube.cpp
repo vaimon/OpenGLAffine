@@ -3,6 +3,8 @@
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
 
+#define deg2rad M_PI /180.0
+
 #define _USE_MATH_DEFINES
 #include "math.h"
 
@@ -121,12 +123,12 @@ int main() {
             }
             else if (event.type == sf::Event::KeyPressed) {
                 switch (event.key.code) {
-                case (sf::Keyboard::W): changeangle(15, 0,0); break;
-                case (sf::Keyboard::S): changeangle(0, -15, 0); break;
-                case (sf::Keyboard::A):changeangle(0, 15, 0); break;
-                case (sf::Keyboard::D): changeangle(0,-15, 0); break;
-                case (sf::Keyboard::E): changeangle(0, 0, 15); break;
-                case (sf::Keyboard::Q): changeangle(0, 0, -15); break;
+                case (sf::Keyboard::W): changeangle(1* deg2rad, 0,0); break;
+                case (sf::Keyboard::S): changeangle(0, -1*deg2rad, 0); break;
+                case (sf::Keyboard::A):changeangle(0, 1* deg2rad, 0); break;
+                case (sf::Keyboard::D): changeangle(0,-1* deg2rad, 0); break;
+                case (sf::Keyboard::E): changeangle(0, 0, 1* deg2rad); break;
+                case (sf::Keyboard::Q): changeangle(0, 0, -1* deg2rad); break;
                 default: break;
                 }
             }
