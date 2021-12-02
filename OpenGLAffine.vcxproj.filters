@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="tetrahedron.cpp">
+    <ClCompile Include="cube.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
