@@ -1,9 +1,9 @@
-// Рисует кубик в клеточку
-
 #include <gl/glew.h>
 #include <SFML/OpenGL.hpp>
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
+
+#define deg2rad M_PI /180.0
 
 #define _USE_MATH_DEFINES
 #include "math.h"
@@ -26,6 +26,11 @@ GLint Attrib_color;
 GLuint VBO_position;
 // ID VBO цвета
 GLuint VBO_color;
+// ID юниформ переменной цвета
+GLint Unif_xangle;
+
+GLint Unif_yangle;
+GLint Unif_zangle;
 // Вершина
 struct Vertex
 {
@@ -37,22 +42,18 @@ struct Vertex
 // Исходный код вершинного шейдера
 const char* VertexShaderSource = R"(
     #version 330 core
-
     // Координаты вершины. Атрибут, инициализируется через буфер.
     in vec3 vertexPosition;
-
     in vec4 color;
     // Выходной параметр с координатами вершины, интерполируется и передётся во фрагментный шейдер 
     out vec3 vPosition;
     out vec4 vert_color;
-
+    uniform float x_angle;
+    uniform float y_angle;
+    uniform float z_angle;
     void main() {
         // Передаём непреобразованную координату во фрагментный шейдер
         vPosition = vertexPosition;
-
-        // Захардкодим углы поворота
-        float x_angle = 1;
-        float y_angle = -1;
         
         // Поворачиваем вершину
         vec3 position = vertexPosition * mat3(
@@ -63,8 +64,11 @@ const char* VertexShaderSource = R"(
             cos(y_angle), 0, sin(y_angle),
             0, 1, 0,
             -sin(y_angle), 0, cos(y_angle)
+        )  * mat3(
+            cos(z_angle), sin(z_angle),0,
+            -sin(z_angle),cos(z_angle) , 0,
+            0, 0, 1
         );
-
         // Присваиваем вершину волшебной переменной gl_Position
         gl_Position = vec4(position, 1.0);
         vert_color=color;
@@ -74,16 +78,11 @@ const char* VertexShaderSource = R"(
 // Исходный код фрагментного шейдера
 const char* FragShaderSource = R"(
     #version 330 core
-
     // Интерполированные координаты вершины, передаются из вершинного шейдера
-    in vec3 vPosition;
     in vec4 vert_color;
-
     // Цвет, который будем отрисовывать
     out vec4 color;
-
     void main() {
-       //color = vec4(1, 0.8, 0, 1);
          color=vert_color;
     }
 )";
@@ -93,7 +92,15 @@ void Init();
 void Draw();
 void Release();
 
-
+float x_angle= 1.0;
+float y_angle = -1.0;
+float z_angle = 1.0;
+//изменение угла поворота по осям
+void changeangle(float angleX, float  angleY, float  angleZ) {
+    x_angle += angleX;
+    y_angle += angleY;
+    z_angle += angleZ;
+}
 int main() {
     sf::Window window(sf::VideoMode(700, 700), "My OpenGL window", sf::Style::Default, sf::ContextSettings(24));
     window.setVerticalSyncEnabled(true);
@@ -112,7 +119,18 @@ int main() {
                 window.close();
             }
             else if (event.type == sf::Event::Resized) {
-                //glViewport(0, 0, event.size.width, event.size.height);
+                glViewport(0, 0, event.size.width, event.size.height);
+            }
+            else if (event.type == sf::Event::KeyPressed) {
+                switch (event.key.code) {
+                case (sf::Keyboard::W): changeangle(1* deg2rad, 0,0); break;
+                case (sf::Keyboard::S): changeangle(0, -1*deg2rad, 0); break;
+                case (sf::Keyboard::A):changeangle(0, 1* deg2rad, 0); break;
+                case (sf::Keyboard::D): changeangle(0,-1* deg2rad, 0); break;
+                case (sf::Keyboard::E): changeangle(0, 0, 1* deg2rad); break;
+                case (sf::Keyboard::Q): changeangle(0, 0, -1* deg2rad); break;
+                default: break;
+                }
             }
         }
 
@@ -158,29 +176,6 @@ void ShaderLog(unsigned int shader)
     }
 }
 
-float bytify(float color)
-{
-    return (1 / 100.0) * color;
-}
-
-std::array<float, 4> HSVtoRGB(float hue, float saturation = 100.0, float value = 100.0)
-{
-    int sw = (int)floor(hue / 60) % 6;
-    float vmin = ((100.0f - saturation) * value) / 100.0;
-    float a = (value - vmin) * (((int)hue % 60) / 60.0);
-    float vinc = vmin + a;
-    float vdec = value - a;
-    switch (sw)
-    {
-    case 0: return { bytify(value), bytify(vinc), bytify(vmin), 1.0 };
-    case 1: return { bytify(vdec), bytify(value), bytify(vmin), 1.0 };
-    case 2: return { bytify(vmin), bytify(value), bytify(vinc), 1.0 };
-    case 3: return { bytify(vmin), bytify(vdec), bytify(value), 1.0 };
-    case 4: return { bytify(vinc), bytify(vmin), bytify(value), 1.0 };
-    case 5: return { bytify(value), bytify(vmin), bytify(vdec), 1.0 };
-    }
-    return { 0, 0, 0 , 0 };
-}
 
 
 void InitVBO()
@@ -204,14 +199,35 @@ void InitVBO()
         { -0.5, -0.5, -0.5 }, { -0.5, +0.5, +0.5 }, { -0.5, -0.5, +0.5 },
         { -0.5, +0.5, +0.5 }, { -0.5, -0.5, -0.5 }, { -0.5, +0.5, -0.5 },
     };
-    float colors[36][4] = {
+ //colors-массив цветов для соответствующих вершин
+    std::array<std::array<float, 4>, 36> colors = {};
+    float r;
+    float g;
+    float b;
+    for (int i = 0; i < 36; i++)
+    {
+        if (triangle[i].x == -0.5)
+            r = 0.0;
+        else 
+            r = 1.0;
+        if (triangle[i].y == -0.5)
+            g = 0.0;
+        else  
+            g = 1.0;
+        if (triangle[i].z == -0.5)
+            b = 0.0;
+        else  
+            b = 1.0;
+        colors[i] = { r,g,b,1.0 };
+    } 
+   /* //это очень плохой способ- прописывать цвета ручками{
         { 1.0, 0.0, 1.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
         { 1.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 1.0, 0.0, 1.0, 1.0 },//невидимый
 
         { 1.0, 1.0, 1.0, 1.0 },{ 0.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
         { 0.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 0.0, 1.0, 1.0, 1.0 },
 
-        { 1.0, 1.0, 0.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 0.0, 0.0, 0.0, 1.0 },//невидимый одна непонятная цвет
+        { 1.0, 1.0, 0.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },//невидимый одна непонятная цвет
         { 0.0, 0.0, 0.0, 1.0 },{ 0.0, 1.0, 0.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
 
         { 1.0, 1.0, 1.0, 1.0 },{ 0.0, 0.0, 1.0, 1.0 },{ 1.0, 0.0, 1.0, 1.0 },
@@ -223,15 +239,16 @@ void InitVBO()
         { 1.0, 1.0, 1.0, 1.0 },{ 1.0, 0.0, 0.0, 1.0 },{ 1.0, 0.0, 1.0, 1.0 },
         { 1.0, 0.0, 0.0, 1.0 },{ 1.0, 1.0, 1.0, 1.0 },{ 1.0, 1.0, 0.0, 1.0 },
 
-  
-        
 
-    };
+
+
+    };*/
     // Передаем вершины в буфер
     glBindBuffer(GL_ARRAY_BUFFER, VBO_position);
     glBufferData(GL_ARRAY_BUFFER, sizeof(triangle), triangle, GL_STATIC_DRAW);
+    // Передаем цвета вершин в буфер
     glBindBuffer(GL_ARRAY_BUFFER, VBO_color);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors.data(), GL_STATIC_DRAW);
     checkOpenGLerror();
 }
 
@@ -286,6 +303,31 @@ void InitShader() {
         std::cout << "could not bind attrib color" << std::endl;
         return;
     }
+    // Вытягиваем ID юниформ угла поворота по ox
+    const char* unif_name = "x_angle";
+    Unif_xangle = glGetUniformLocation(Program, unif_name);
+    if (Unif_xangle<-360)
+    {
+        std::cout << "could not bind uniform " << unif_name << std::endl;
+        return;
+    }
+    // Вытягиваем ID юниформ угла поворота по oy
+    unif_name = "y_angle";
+    Unif_yangle = glGetUniformLocation(Program, unif_name);
+    if (Unif_yangle < -360)
+    {
+        std::cout << "could not bind uniform " << unif_name << std::endl;
+        return;
+    }
+    // Вытягиваем ID юниформ угла поворота по oz
+    unif_name = "z_angle";
+    Unif_zangle = glGetUniformLocation(Program, unif_name);
+    if (Unif_zangle < -360)
+    {
+        std::cout << "could not bind uniform " << unif_name << std::endl;
+        return;
+    }
+   
 
     checkOpenGLerror();
 }
@@ -301,6 +343,11 @@ void Init() {
 void Draw() {
     // Устанавливаем шейдерную программу текущей
     glUseProgram(Program);
+    //повороты вершин
+    glUniform1f(Unif_xangle, x_angle);
+    glUniform1f(Unif_yangle, y_angle);
+    glUniform1f(Unif_zangle, z_angle);
+
     // Включаем массив атрибутов
     glEnableVertexAttribArray(Attrib_vertex);
     glEnableVertexAttribArray(Attrib_color);
